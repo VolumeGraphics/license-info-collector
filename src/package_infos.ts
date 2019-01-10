@@ -36,7 +36,7 @@ export interface PackageContent {
   license?: string;
 }
 
-interface Dependency {
+export interface Dependency {
   [index: string]: string;
 }
 
@@ -235,7 +235,7 @@ for(let content of packageContents) {
 return invalid;
 }
 
-interface MissingPackages {
+export interface MissingPackages {
   packageReference: PackageContent & PackageDependencies & RawPackageDependencies,
   missingDependencies: Dependency,
   missingDevDependencies: Dependency,
