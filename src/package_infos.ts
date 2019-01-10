@@ -40,10 +40,10 @@ interface Dependency {
   [index: string]: string;
 }
 
-interface RawPackageDependencies {
-  dependencies: Dependency;
-  devDependencies: Dependency;
-  optionalDependencies: Dependency;
+export interface RawPackageDependencies {
+  dependencies?: Dependency;
+  devDependencies?: Dependency;
+  optionalDependencies?: Dependency;
 }
 
 export interface PackageDependencies {
@@ -103,34 +103,45 @@ function getPackageFiles (nodeModulePaths: string[]) {
   return paths;
 }
 
-function resolveRawDependencies(contents: (PackageContent & RawPackageDependencies)[]): (PackageContent & RawPackageDependencies & PackageDependencies)[] {
+interface DependencyResults {
+  foundPackages: (PackageContent & RawPackageDependencies)[];
+  missing: Dependency;
+}
 
-  const resolve = (dependencies: Dependency) => {
-    let result : (PackageContent & RawPackageDependencies)[] = [];
-    for(let packageName in dependencies) {
-      const versionSemanticString = dependencies[packageName];
-      const referencedLib = contents.find((pack) => {
-        return pack.name === packageName && semver.satisfies(pack.version, versionSemanticString);
-      });
-      if(referencedLib !== undefined)
-        result.push(referencedLib);
-    }
-    return result;
+function resolve (dependencies: Dependency, contents: (PackageContent & RawPackageDependencies)[]) {
+  let result: DependencyResults = {
+    foundPackages: [],
+    missing: {}
   };
+  for(let packageName in dependencies) {
+    const versionSemanticString = dependencies[packageName];
+    const referencedLib = contents.find((pack) => {
+      return pack.name === packageName && (semver.satisfies(pack.version, versionSemanticString) || pack.version === versionSemanticString);
+    });
+    if (referencedLib === undefined) {
+      result.missing[packageName] = dependencies[packageName];
+    } else {
+      result.foundPackages.push(referencedLib);
+    }
+  }
+  return result;
+};
+
+function resolveRawDependencies(contents: (PackageContent & RawPackageDependencies)[]): (PackageContent & RawPackageDependencies & PackageDependencies)[] {
 
   return contents.map((content) => {
 
     const resolvedDependencies: PackageDependencies = {
-      packageDependencies: resolve(content.dependencies),
-      packageDevDependencies: resolve(content.devDependencies),
-      packageOptionalDependencies: resolve(content.optionalDependencies)
+      packageDependencies: resolve(content.dependencies, contents).foundPackages,
+      packageDevDependencies: resolve(content.devDependencies, contents).foundPackages,
+      packageOptionalDependencies: resolve(content.optionalDependencies, contents).foundPackages
     };
 
     return Object.assign(content, resolvedDependencies);
   });
 }
 
-function removeUnreferencedContents(contents: (PackageContent & PackageDependencies)[], targetPackage: (PackageContent & PackageDependencies)) {
+function removeUnreferencedContents(contents: (PackageContent & PackageDependencies & RawPackageDependencies)[], targetPackage: (PackageContent & PackageDependencies & RawPackageDependencies)) {
   return contents.filter((content) => {
     if(content === targetPackage) {
       return true;
@@ -146,7 +157,7 @@ function removeUnreferencedContents(contents: (PackageContent & PackageDependenc
   });
 }
 
-export function collectPackageInfos(packageJson: string, nodeModulePaths: string[]) {
+export function collectPackageInfos(productPackageJson: string, nodeModulePaths: string[]): (PackageContent & PackageDependencies & RawPackageDependencies)[] {
 
   const transformDeprecatedContent = (content: PackageContent, deprecatedContent: DeprecatedContent) => {
     if(content.license && typeof content.license === "string") {
@@ -194,10 +205,11 @@ export function collectPackageInfos(packageJson: string, nodeModulePaths: string
 
   // removeDuplicates(contents);
   contents = groupSameContents(contents);
-  contents.push(JSON.parse(fs.readFileSync(packageJson).toString()));
+  contents.push(JSON.parse(fs.readFileSync(productPackageJson).toString()));
   const resolvedContents = resolveRawDependencies(contents);
   const referencedContents = removeUnreferencedContents(resolvedContents, resolvedContents[resolvedContents.length - 1]);
-  referencedContents.pop();
+
+  //referencedContents.pop();
   return referencedContents;
 }
 
@@ -221,4 +233,37 @@ for(let content of packageContents) {
   }
 }
 return invalid;
+}
+
+interface MissingPackages {
+  packageReference: PackageContent & PackageDependencies & RawPackageDependencies,
+  missingDependencies: Dependency,
+  missingDevDependencies: Dependency,
+  missingOptionalDependencies: Dependency
+}
+
+export function findMissingPackages(contents: (PackageContent & PackageDependencies & RawPackageDependencies)[]): MissingPackages[]
+{
+  const missing: MissingPackages[] = [];
+
+  for (const content of contents) {
+
+    const missingDependencies = resolve(content.dependencies, contents).missing;
+    const missingDevDependencies = resolve(content.devDependencies, contents).missing;
+    const missingOptionalDependencies = resolve(content.optionalDependencies, contents).missing;
+
+    if ( Object.keys(missingDependencies).length !== 0
+      || Object.keys(missingDevDependencies).length !== 0
+      || Object.keys(missingOptionalDependencies).length !== 0) {
+      
+      missing.push({
+        packageReference: content,
+        missingDependencies: missingDependencies,
+        missingDevDependencies: missingDevDependencies,
+        missingOptionalDependencies: missingOptionalDependencies
+      });
+    }
+  }
+
+  return missing;
 }
