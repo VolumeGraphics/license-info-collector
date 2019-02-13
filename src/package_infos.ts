@@ -108,7 +108,7 @@ interface DependencyResults {
   missing: Dependency;
 }
 
-function resolve (dependencies: Dependency, contents: (PackageContent & RawPackageDependencies)[]) {
+function resolve (dependencies: Dependency, contents: (PackageContent & RawPackageDependencies)[], disableNpmVersionCheck: boolean) {
   let result: DependencyResults = {
     foundPackages: [],
     missing: {}
@@ -116,7 +116,20 @@ function resolve (dependencies: Dependency, contents: (PackageContent & RawPacka
   for(let packageName in dependencies) {
     const versionSemanticString = dependencies[packageName];
     const referencedLib = contents.find((pack) => {
-      return pack.name === packageName && (semver.satisfies(pack.version, versionSemanticString) || pack.version === versionSemanticString);
+      if (pack.name !== packageName)
+        return false;
+      
+      if (pack.version === versionSemanticString)
+        return true;
+      
+      if (disableNpmVersionCheck)
+        return false;
+      
+      try {
+        return semver.satisfies(pack.version, versionSemanticString)
+      } catch (e) {
+        return false;
+      }
     });
     if (referencedLib === undefined) {
       result.missing[packageName] = dependencies[packageName];
@@ -127,14 +140,14 @@ function resolve (dependencies: Dependency, contents: (PackageContent & RawPacka
   return result;
 };
 
-function resolveRawDependencies(contents: (PackageContent & RawPackageDependencies)[]): (PackageContent & RawPackageDependencies & PackageDependencies)[] {
+function resolveRawDependencies(contents: (PackageContent & RawPackageDependencies)[], disableNpmVersionCheck: boolean): (PackageContent & RawPackageDependencies & PackageDependencies)[] {
 
   return contents.map((content) => {
 
     const resolvedDependencies: PackageDependencies = {
-      packageDependencies: resolve(content.dependencies, contents).foundPackages,
-      packageDevDependencies: resolve(content.devDependencies, contents).foundPackages,
-      packageOptionalDependencies: resolve(content.optionalDependencies, contents).foundPackages
+      packageDependencies: resolve(content.dependencies, contents, disableNpmVersionCheck).foundPackages,
+      packageDevDependencies: resolve(content.devDependencies, contents, disableNpmVersionCheck).foundPackages,
+      packageOptionalDependencies: resolve(content.optionalDependencies, contents, disableNpmVersionCheck).foundPackages
     };
 
     return Object.assign(content, resolvedDependencies);
@@ -157,7 +170,7 @@ function removeUnreferencedContents(contents: (PackageContent & PackageDependenc
   });
 }
 
-export function collectPackageInfos(productPackageJson: string, nodeModulePaths: string[]): (PackageContent & PackageDependencies & RawPackageDependencies)[] {
+export function collectPackageInfos(productPackageJson: string, nodeModulePaths: string[], disableNpmVersionCheck: boolean): (PackageContent & PackageDependencies & RawPackageDependencies)[] {
 
   const transformDeprecatedContent = (content: PackageContent, deprecatedContent: DeprecatedContent) => {
     if(content.license && typeof content.license === "string") {
@@ -206,7 +219,7 @@ export function collectPackageInfos(productPackageJson: string, nodeModulePaths:
   // removeDuplicates(contents);
   contents = groupSameContents(contents);
   contents.push(JSON.parse(fs.readFileSync(productPackageJson).toString()));
-  const resolvedContents = resolveRawDependencies(contents);
+  const resolvedContents = resolveRawDependencies(contents, disableNpmVersionCheck);
   const referencedContents = removeUnreferencedContents(resolvedContents, resolvedContents[resolvedContents.length - 1]);
 
   //referencedContents.pop();
@@ -242,15 +255,15 @@ export interface MissingPackages {
   missingOptionalDependencies: Dependency
 }
 
-export function findMissingPackages(contents: (PackageContent & PackageDependencies & RawPackageDependencies)[]): MissingPackages[]
+export function findMissingPackages(contents: (PackageContent & PackageDependencies & RawPackageDependencies)[], disableNpmVersionCheck: boolean): MissingPackages[]
 {
   const missing: MissingPackages[] = [];
 
   for (const content of contents) {
 
-    const missingDependencies = resolve(content.dependencies, contents).missing;
-    const missingDevDependencies = resolve(content.devDependencies, contents).missing;
-    const missingOptionalDependencies = resolve(content.optionalDependencies, contents).missing;
+    const missingDependencies = resolve(content.dependencies, contents, disableNpmVersionCheck).missing;
+    const missingDevDependencies = resolve(content.devDependencies, contents, disableNpmVersionCheck).missing;
+    const missingOptionalDependencies = resolve(content.optionalDependencies, contents, disableNpmVersionCheck).missing;
 
     if ( Object.keys(missingDependencies).length !== 0
       || Object.keys(missingDevDependencies).length !== 0
