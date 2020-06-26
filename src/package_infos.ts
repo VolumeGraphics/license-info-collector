@@ -205,24 +205,24 @@ export function collectPackageInfos(productPackageJson: string, nodeModulePaths:
     }
   };
 
-  let contents: (PackageContent & RawPackageDependencies)[] = getPackageFiles(nodeModulePaths).map((file) => {
-    const fileContents = fs.readFileSync(file).toString();
+  const createPackageContent = (packageFilePath: string) => {
+    const fileContents = fs.readFileSync(packageFilePath).toString();
     const contents = JSON.parse(fileContents);
 
     const packageContent: PackageContent & RawPackageDependencies = contents;
-    packageContent.packageJson = [file];
+    packageContent.packageJson = [packageFilePath];
     transformDeprecatedContent(packageContent, contents);
     
     return packageContent;
-  });
+  };
 
-  // removeDuplicates(contents);
+  let contents: (PackageContent & RawPackageDependencies)[] = getPackageFiles(nodeModulePaths).map(createPackageContent);
+
   contents = groupSameContents(contents);
-  contents.push(JSON.parse(fs.readFileSync(productPackageJson).toString()));
+  contents.push(createPackageContent(productPackageJson));
   const resolvedContents = resolveRawDependencies(contents, disableNpmVersionCheck);
   const referencedContents = removeUnreferencedContents(resolvedContents, resolvedContents[resolvedContents.length - 1]);
 
-  //referencedContents.pop();
   return referencedContents;
 }
 
