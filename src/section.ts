@@ -1,17 +1,18 @@
 import { PackageContent } from './package_infos'
-import * as fs from 'fs'
-import * as path from 'path'
 
-export interface License {
-  file?: string;
-  name: string;
+export type LicenseMeta<T> = {
+  licenseName: string;
+  meta: T;
 }
 
-export interface LicenseSection {
-  license: string;
-  licenseText?: string;
+export type LicenseSection = {
+  licenseName: string;
   libraries: PackageContent[];
 }
+
+export type LicenseSectionWithMeta<T> = {
+  meta?: T;
+} & LicenseSection;
 
 function orderByLicense(packageInfos: PackageContent[]) {
   const getLicenseStr = (a: string) => {
@@ -23,25 +24,14 @@ function orderByLicense(packageInfos: PackageContent[]) {
   });
 }
 
-function readLicenseText(licenseName: string, licensefiles: License[], licensesDirectory: string) {
-  const license = licensefiles.find((l : License) => {return l.name === licenseName;});
-  if(!license || !license.file) {
-    return undefined;
-  }
-
-  const licenseText = fs.readFileSync(path.join(licensesDirectory, license.file)).toString();
-  return licenseText;
-}
-
-export function gatherLicenseSections(packageInfos: PackageContent [], licenses: License[], licensesDirectory: string = "") {
+export function gatherLicenseSections(packageInfos: PackageContent []) {
   orderByLicense(packageInfos);
 
   const licenseSections: LicenseSection[] = [];
   for(let info of packageInfos) {
-    if(licenseSections.length === 0 || licenseSections[licenseSections.length - 1].license !== info.license) {
+    if(licenseSections.length === 0 || licenseSections[licenseSections.length - 1].licenseName !== info.license) {
       licenseSections.push({
-        license: info.license,
-        licenseText: readLicenseText(info.license, licenses, licensesDirectory),
+        licenseName: info.license,
         libraries: []
       });
     }
@@ -55,4 +45,11 @@ export function gatherLicenseSections(packageInfos: PackageContent [], licenses:
   }
 
   return licenseSections;
+}
+
+export function attachMeta<T>(l: LicenseSection[], m: LicenseMeta<T>[]): LicenseSectionWithMeta<T>[] {
+  return l.map((ls) => {
+    const licenseMeta: LicenseMeta<T> | undefined = m.find((lm) => lm.licenseName === ls.licenseName);
+    return {...ls, ...licenseMeta};
+  })
 }
