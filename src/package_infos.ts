@@ -1,7 +1,6 @@
 import * as path from 'path'
 import * as fs from 'fs'
 import * as semver from 'semver'
-import { License } from './section';
 
 export interface Author {
   name?: string;
@@ -226,9 +225,11 @@ export function collectPackageInfos(productPackageJson: string, nodeModulePaths:
   return referencedContents;
 }
 
+export type LicenseName = string;
+
 export function findInvalidPackageContent(
   packageContents: (PackageContent & PackageDependencies)[], 
-  allowedLicenses: License[], 
+  allowedLicenses: LicenseName[], 
   evaluateCopyrightInfo: (content: PackageContent) => boolean
 ) {
 
@@ -237,7 +238,7 @@ const invalid: InvalidPackageContent = {
   license: []
 }
 for(let content of packageContents) {
-  if(!allowedLicenses.find( (l: License) => { return l.name === content.license; } )) {
+  if(!allowedLicenses.find( (name: LicenseName) => { return name === content.license; } )) {
     invalid.license.push(content);
   }
 
