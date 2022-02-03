@@ -56,6 +56,25 @@ export interface InvalidPackageContent {
   license: PackageContent[];
 }
 
+export type ContentAndRawDependencies = PackageContent & RawPackageDependencies;
+
+export type CollectPackageError = {
+  packageFilePath: string;
+}
+
+export type CollectPackageInfoResult =  {
+  result: (PackageContent & PackageDependencies & RawPackageDependencies)[];
+  invalidPackages: CollectPackageError[]; 
+}
+
+function isCollectPackageError(object: ContentAndRawDependencies | CollectPackageError): object is CollectPackageError {
+  return (object as CollectPackageError).packageFilePath !== undefined;
+}
+
+function isCollectRawDependencies(object: ContentAndRawDependencies | CollectPackageError): object is ContentAndRawDependencies {
+  return !isCollectPackageError(object);
+}
+
 function isSamePackageContent(left: PackageContent, right: PackageContent) {
   return left.name === right.name && left.version === right.version;
 }
@@ -103,11 +122,11 @@ function getPackageFiles (nodeModulePaths: string[]) {
 }
 
 interface DependencyResults {
-  foundPackages: (PackageContent & RawPackageDependencies)[];
+  foundPackages: (ContentAndRawDependencies)[];
   missing: Dependency;
 }
 
-function resolve (dependencies: Dependency, contents: (PackageContent & RawPackageDependencies)[], disableNpmVersionCheck: boolean) {
+function resolve (dependencies: Dependency, contents: (ContentAndRawDependencies)[], disableNpmVersionCheck: boolean) {
   let result: DependencyResults = {
     foundPackages: [],
     missing: {}
@@ -139,7 +158,7 @@ function resolve (dependencies: Dependency, contents: (PackageContent & RawPacka
   return result;
 };
 
-function resolveRawDependencies(contents: (PackageContent & RawPackageDependencies)[], disableNpmVersionCheck: boolean): (PackageContent & RawPackageDependencies & PackageDependencies)[] {
+function resolveRawDependencies(contents: (ContentAndRawDependencies)[], disableNpmVersionCheck: boolean): (ContentAndRawDependencies & PackageDependencies)[] {
 
   return contents.map((content) => {
 
@@ -169,7 +188,7 @@ function removeUnreferencedContents(contents: (PackageContent & PackageDependenc
   });
 }
 
-export function collectPackageInfos(productPackageJson: string, nodeModulePaths: string[], disableNpmVersionCheck: boolean): (PackageContent & PackageDependencies & RawPackageDependencies)[] {
+export function collectPackageInfos(productPackageJson: string, nodeModulePaths: string[], disableNpmVersionCheck: boolean): CollectPackageInfoResult {
 
   const transformDeprecatedContent = (content: PackageContent, deprecatedContent: DeprecatedContent) => {
     if(content.license && typeof content.license === "string") {
@@ -204,25 +223,47 @@ export function collectPackageInfos(productPackageJson: string, nodeModulePaths:
     }
   };
 
-  const createPackageContent = (packageFilePath: string) => {
+  const parseFileContents = (packageFilePath: string): ContentAndRawDependencies | CollectPackageError => {
     const fileContents = fs.readFileSync(packageFilePath).toString();
-    const contents = JSON.parse(fileContents);
+    try {
+      return JSON.parse(fileContents);
+    } catch(e) {
+      return {
+        packageFilePath
+      };
+    }
+  }
 
-    const packageContent: PackageContent & RawPackageDependencies = contents;
-    packageContent.packageJson = [packageFilePath];
-    transformDeprecatedContent(packageContent, contents);
+  const createPackageContent = (packageFilePath: string) => {
+    const contents = parseFileContents(packageFilePath);
+    if (isCollectPackageError(contents))
+      return contents;
+
+    contents.packageJson = [packageFilePath];
+    transformDeprecatedContent(contents, contents as DeprecatedContent);
     
-    return packageContent;
+    return contents;
   };
 
-  let contents: (PackageContent & RawPackageDependencies)[] = getPackageFiles(nodeModulePaths).map(createPackageContent);
+  const contentsAndErrors: (ContentAndRawDependencies | CollectPackageError)[] = 
+    getPackageFiles(nodeModulePaths).map(createPackageContent);
+  const productContentOrError = createPackageContent(productPackageJson);
 
+  let contents = contentsAndErrors.filter(isCollectRawDependencies);
   contents = groupSameContents(contents);
-  contents.push(createPackageContent(productPackageJson));
-  const resolvedContents = resolveRawDependencies(contents, disableNpmVersionCheck);
-  const referencedContents = removeUnreferencedContents(resolvedContents, resolvedContents[resolvedContents.length - 1]);
+  const invalidPackages = contentsAndErrors.filter(isCollectPackageError);
 
-  return referencedContents;
+  isCollectPackageError(productContentOrError)
+    ? invalidPackages.push(productContentOrError)
+    : contents.push(productContentOrError);
+
+  const resolvedContents = resolveRawDependencies(contents, disableNpmVersionCheck);
+  const result = removeUnreferencedContents(resolvedContents, resolvedContents[resolvedContents.length - 1]);
+
+  return {
+    result,
+    invalidPackages
+  }
 }
 
 export type LicenseName = string;
