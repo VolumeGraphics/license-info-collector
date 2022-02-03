@@ -67,11 +67,11 @@ export type CollectPackageInfoResult =  {
   invalidPackages: CollectPackageError[]; 
 }
 
-function isCollectPackageError(object: ContentAndRawDependencies | CollectPackageError): object is CollectPackageError {
+export function isCollectPackageError(object: ContentAndRawDependencies | CollectPackageError): object is CollectPackageError {
   return (object as CollectPackageError).packageFilePath !== undefined;
 }
 
-function isCollectRawDependencies(object: ContentAndRawDependencies | CollectPackageError): object is ContentAndRawDependencies {
+export function isCollectRawDependencies(object: ContentAndRawDependencies | CollectPackageError): object is ContentAndRawDependencies {
   return !isCollectPackageError(object);
 }
 
