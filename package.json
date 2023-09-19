@@ -28,7 +28,7 @@
     "@types/node": "^10.17.60",
     "@types/semver": "^5.5.0",
     "ts-node": "^6.2.0",
-    "typescript": "^2.9.2"
+    "typescript": "^5.2.2"
   },
   "dependencies": {
     "semver": "^5.7.2"
