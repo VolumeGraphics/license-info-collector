@@ -1,6 +1,6 @@
 {
   "name": "@volumegraphics/license-info-collector",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Collects license information of all dependencies of your project",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -25,12 +25,12 @@
     "url": "https://github.com/VolumeGraphics/license-info-collector.git"
   },
   "devDependencies": {
-    "@types/node": "^10.1.0",
+    "@types/node": "^10.17.60",
     "@types/semver": "^5.5.0",
-    "ts-node": "^6.0.3",
-    "typescript": "^2.8.3"
+    "ts-node": "^6.2.0",
+    "typescript": "^5.2.2"
   },
   "dependencies": {
-    "semver": "^5.5.0"
+    "semver": "^5.7.2"
   }
 }
